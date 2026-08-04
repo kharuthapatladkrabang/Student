@@ -118,11 +118,19 @@
 
             </div>
             
-            <div class="mt-4 text-sm text-gray-500 flex justify-between items-center">
+            <div class="mt-4 text-sm text-gray-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <span id="resultCount">กำลังโหลดข้อมูล...</span>
-                <button id="resetBtn" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
-                    <i class="fas fa-redo text-xs mr-1"></i> ล้างค่า
-                </button>
+                <div class="flex flex-wrap gap-2 items-center">
+                    <button id="copyBtn" class="text-emerald-700 hover:text-emerald-900 text-sm font-medium transition-colors hidden bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg border border-emerald-100 shadow-sm">
+                        <i class="fas fa-copy text-xs mr-1"></i> คัดลอก
+                    </button>
+                    <button id="downloadBtn" class="text-indigo-700 hover:text-indigo-900 text-sm font-medium transition-colors hidden bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg border border-indigo-100 shadow-sm">
+                        <i class="fas fa-file-csv text-xs mr-1"></i> ดาวน์โหลด CSV
+                    </button>
+                    <button id="resetBtn" class="text-blue-700 hover:text-blue-900 text-sm font-medium transition-colors bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 shadow-sm">
+                        <i class="fas fa-redo text-xs mr-1"></i> ล้างค่า
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -167,6 +175,8 @@
         const positionFilter = document.getElementById('positionFilter');
         const sortSelect = document.getElementById('sortSelect');
         const resultCount = document.getElementById('resultCount');
+        const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
         const resultsGrid = document.getElementById('resultsGrid');
         const loadingState = document.getElementById('loadingState');
         const errorState = document.getElementById('errorState');
@@ -329,9 +339,13 @@
             if (filteredData.length === 0) {
                 resultsGrid.classList.add('hidden');
                 emptyState.classList.remove('hidden');
+                if(copyBtn) copyBtn.classList.add('hidden');
+                if(downloadBtn) downloadBtn.classList.add('hidden');
             } else {
                 emptyState.classList.add('hidden');
                 resultsGrid.classList.remove('hidden');
+                if(copyBtn) copyBtn.classList.remove('hidden');
+                if(downloadBtn) downloadBtn.classList.remove('hidden');
 
                 filteredData.forEach(item => {
                     const card = document.createElement('div');
@@ -402,6 +416,10 @@
                 sortSelect.value = 'id_asc';
                 applyFilters();
             });
+
+            // Export Buttons
+            if(copyBtn) copyBtn.addEventListener('click', copyToClipboard);
+            if(downloadBtn) downloadBtn.addEventListener('click', downloadCSV);
         }
 
         function showLoading(isLoading) {
@@ -421,6 +439,74 @@
             document.getElementById('errorMsg').textContent = message;
             resultsGrid.classList.add('hidden');
             emptyState.classList.add('hidden');
+        }
+
+        function copyToClipboard() {
+            if (filteredData.length === 0) return;
+            
+            // จัดเตรียมรูปแบบข้อความให้คัดลอกลง Excel ได้พอดี (Tab-Separated Values)
+            let header = "รหัส\tชื่อ-สกุล\tชื่อเล่น\tชั้นปี\tตำแหน่ง\tอีเมล\n";
+            let textData = header + filteredData.map(item => {
+                return `${item.id}\t${item.name}\t${item.nickname || '-'}\t${item.year || '-'}\t${item.position || '-'}\t${item.email || '-'}`;
+            }).join("\n");
+
+            // ใช้เทคนิค Textarea แบบซ่อนเพื่อให้ใช้คำสั่ง Copy ได้ในทุกสภาพแวดล้อม
+            const textarea = document.createElement('textarea');
+            textarea.value = textData;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            
+            try {
+                document.execCommand('copy');
+                
+                // เอฟเฟกต์ตอบกลับเมื่อคัดลอกสำเร็จ
+                const originalHtml = copyBtn.innerHTML;
+                copyBtn.innerHTML = '<i class="fas fa-check text-xs mr-1"></i> คัดลอกสำเร็จ';
+                copyBtn.classList.replace('text-emerald-700', 'text-green-700');
+                copyBtn.classList.replace('bg-emerald-50', 'bg-green-100');
+                
+                setTimeout(() => { 
+                    copyBtn.innerHTML = originalHtml; 
+                    copyBtn.classList.replace('text-green-700', 'text-emerald-700');
+                    copyBtn.classList.replace('bg-green-100', 'bg-emerald-50');
+                }, 2000);
+            } catch (err) {
+                console.error('ไม่สามารถคัดลอกได้', err);
+            }
+            
+            document.body.removeChild(textarea);
+        }
+
+        function downloadCSV() {
+            if (filteredData.length === 0) return;
+            
+            // จัดเรียงข้อมูลเพื่อส่งออกเป็น CSV
+            const exportData = filteredData.map(item => ({
+                "รหัส": item.id,
+                "ชื่อนาม-สกุล": item.name,
+                "ชื่อเล่น": item.nickname,
+                "ชั้นปี": item.year,
+                "ตำแหน่ง": item.position,
+                "อีเมล": item.email
+            }));
+
+            // แปลงข้อมูลกลับเป็นโครงสร้าง CSV ด้วย PapaParse
+            const csv = Papa.unparse(exportData);
+            
+            // เพิ่ม BOM (Byte Order Mark) "\uFEFF" เพื่อให้ Excel อ่านภาษาไทย (UTF-8) ได้สมบูรณ์
+            const csvData = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+            const csvURL = window.URL.createObjectURL(csvData);
+            
+            // สร้างแท็กลิงก์จำลองเพื่อกระตุ้นให้เกิดการดาวน์โหลด
+            const tempLink = document.createElement('a');
+            tempLink.href = csvURL;
+            tempLink.setAttribute('download', 'student_list.csv');
+            document.body.appendChild(tempLink);
+            tempLink.click();
+            document.body.removeChild(tempLink);
         }
 
         // Start Application
