@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบค้นหารายชื่อนักศึกษา</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            background-color: #f3f4f6;
+        }
+        /* Custom Scrollbar for better UI */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 text-gray-800">
+
+    <header class="bg-white shadow-sm sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg">
+                        <i class="fas fa-users text-xl"></i>
+                    </div>
+                    <h1 class="text-xl md:text-2xl font-bold text-gray-900">ระบบค้นหารายชื่อ</h1>
+                </div>
+                <div class="text-sm text-gray-500 hidden sm:block">
+                    <i class="fas fa-database mr-1"></i> ดึงข้อมูลจากระบบ
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Search and Filter Section -->
+        <section class="glass-panel rounded-2xl shadow-sm border border-gray-100 p-5 md:p-6 mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                
+                <!-- Main Search Input -->
+                <div class="md:col-span-12 lg:col-span-4 relative">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ค้นหาทั่วไป</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-search text-gray-400"></i>
+                        </div>
+                        <input type="text" id="searchInput" 
+                            class="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all" 
+                            placeholder="พิมพ์ รหัส, ชื่อ, ชื่อเล่น หรือชั้นปี...">
+                    </div>
+                </div>
+
+                <!-- Year Filter -->
+                <div class="md:col-span-4 lg:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ชั้นปี</label>
+                    <div class="relative">
+                        <select id="yearFilter" class="block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-xl appearance-none bg-white transition-all">
+                            <option value="">ทั้งหมด</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Position Filter -->
+                <div class="md:col-span-4 lg:col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">ตำแหน่ง</label>
+                    <div class="relative">
+                        <select id="positionFilter" class="block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-xl appearance-none bg-white transition-all">
+                            <option value="">ทั้งหมด</option>
+                            <!-- Options will be populated by JS -->
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <i class="fas fa-chevron-down text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sort Options -->
+                <div class="md:col-span-4 lg:col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">เรียงลำดับ</label>
+                    <div class="relative">
+                        <select id="sortSelect" class="block w-full pl-3 pr-10 py-2.5 text-base border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-xl appearance-none bg-white transition-all">
+                            <option value="id_asc">รหัส (น้อยไปมาก)</option>
+                            <option value="id_desc">รหัส (มากไปน้อย)</option>
+                            <option value="name_asc">ชื่อ (ก-ฮ)</option>
+                            <option value="name_desc">ชื่อ (ฮ-ก)</option>
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                            <i class="fas fa-sort text-xs"></i>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-4 text-sm text-gray-500 flex justify-between items-center">
+                <span id="resultCount">กำลังโหลดข้อมูล...</span>
+                <button id="resetBtn" class="text-blue-600 hover:text-blue-800 text-sm font-medium transition-colors">
+                    <i class="fas fa-redo text-xs mr-1"></i> ล้างค่า
+                </button>
+            </div>
+        </section>
+
+        <!-- Loading Spinner -->
+        <div id="loadingState" class="flex flex-col items-center justify-center py-20">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+            <p class="text-gray-500 font-medium text-lg animate-pulse">กำลังเชื่อมต่อกับฐานข้อมูล...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" class="hidden flex flex-col items-center justify-center py-20 text-center">
+            <div class="text-red-500 text-5xl mb-4"><i class="fas fa-exclamation-triangle"></i></div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">ไม่สามารถโหลดข้อมูลได้</h3>
+            <p class="text-gray-500 mb-4" id="errorMsg">โปรดตรวจสอบการเชื่อมต่อ หรือตั้งค่า Google Sheets ให้เป็นสาธารณะ</p>
+            <button onclick="fetchData()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">ลองใหม่อีกครั้ง</button>
+        </div>
+
+        <!-- Empty State (No Results) -->
+        <div id="emptyState" class="hidden flex flex-col items-center justify-center py-20 text-center">
+            <div class="text-gray-300 text-6xl mb-4"><i class="fas fa-search"></i></div>
+            <h3 class="text-xl font-bold text-gray-700 mb-2">ไม่พบข้อมูลที่ค้นหา</h3>
+            <p class="text-gray-500">ลองเปลี่ยนคำค้นหา หรือปรับตัวกรองของคุณใหม่</p>
+        </div>
+
+        <!-- Results Grid -->
+        <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+            <!-- Cards will be injected here by JavaScript -->
+        </div>
+
+    </main>
+
+    <script>
+        // Google Sheets Published CSV URL
+        const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRshdqrNqiULIGkdVuN9tidZeUrHR8OgkWGNsKFBBWoc1T0rMCMdU1lJLpoe8qrGpuJVuY5wqXYzsmQ/pub?gid=1534305480&single=true&output=csv";
+
+        let allData = [];
+        let filteredData = [];
+
+        // DOM Elements
+        const searchInput = document.getElementById('searchInput');
+        const yearFilter = document.getElementById('yearFilter');
+        const positionFilter = document.getElementById('positionFilter');
+        const sortSelect = document.getElementById('sortSelect');
+        const resultCount = document.getElementById('resultCount');
+        const resultsGrid = document.getElementById('resultsGrid');
+        const loadingState = document.getElementById('loadingState');
+        const errorState = document.getElementById('errorState');
+        const emptyState = document.getElementById('emptyState');
+        const resetBtn = document.getElementById('resetBtn');
+
+        function init() {
+            setupEventListeners();
+            fetchData();
+        }
+
+        function fetchData() {
+            showLoading(true);
+            
+            Papa.parse(SHEET_URL, {
+                download: true,
+                header: false, // We'll parse headers manually to be safe and find Column B accurately
+                complete: function(results) {
+                    processData(results.data);
+                },
+                error: function(error) {
+                    console.error("Error fetching CSV:", error);
+                    showError("เกิดข้อผิดพลาดในการโหลดข้อมูล: " + error.message);
+                }
+            });
+        }
+
+        function processData(data) {
+            if (!data || data.length === 0) {
+                showError("ไม่พบข้อมูลในตาราง");
+                return;
+            }
+
+            // Find column indices dynamically
+            let colMap = { id: -1, name: -1, nickname: -1, year: -1, position: -1, email: -1 };
+            let headerRowIndex = -1;
+
+            // Search for header row (usually in the first 5 rows)
+            for (let i = 0; i < Math.min(data.length, 5); i++) {
+                let row = data[i];
+                for (let j = 0; j < row.length; j++) {
+                    let val = (row[j] || "").toString().trim();
+                    if (val.includes("กรอกรหัสด้านล่าง") || val.includes("รหัส")) colMap.id = j;
+                    else if (val.includes("ชื่อนาม-สกุล") || val.includes("ชื่อ-สกุล") || val === "ชื่อ") colMap.name = j;
+                    else if (val.includes("ชื่อเล่น")) colMap.nickname = j;
+                    else if (val.includes("ชั้นปี")) colMap.year = j;
+                    else if (val.includes("ตำแหน่ง")) colMap.position = j;
+                    else if (val.includes("เมลสถาบัน") || val.includes("อีเมล")) colMap.email = j;
+                }
+                
+                // If we found at least the ID column, consider this the header row
+                if (colMap.id !== -1) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            // Fallback if dynamic parsing fails: Assume based on prompt "เริ่มที่คอลัม B"
+            // A=0, B=1, C=2, D=3, E=4, F=5, G=6
+            if (colMap.id === -1) {
+                colMap = { id: 1, name: 2, nickname: 3, year: 4, position: 5, email: 6 };
+                headerRowIndex = 0; // Assume row 0 is header
+            }
+
+            allData = [];
+            let uniqueYears = new Set();
+            let uniquePositions = new Set();
+
+            // Parse rows below the header
+            for (let i = headerRowIndex + 1; i < data.length; i++) {
+                let row = data[i];
+                let idValue = (row[colMap.id] || "").toString().trim();
+                
+                // Skip completely empty rows or rows without an ID
+                if (!idValue) continue;
+
+                let item = {
+                    id: idValue,
+                    name: (row[colMap.name] || "").toString().trim(),
+                    nickname: (row[colMap.nickname] || "").toString().trim(),
+                    year: (row[colMap.year] || "").toString().trim(),
+                    position: (row[colMap.position] || "").toString().trim(),
+                    email: (row[colMap.email] || "").toString().trim()
+                };
+
+                allData.push(item);
+
+                // Collect unique values for dropdowns
+                if (item.year) uniqueYears.add(item.year);
+                if (item.position) uniquePositions.add(item.position);
+            }
+
+            populateDropdown(yearFilter, Array.from(uniqueYears).sort());
+            populateDropdown(positionFilter, Array.from(uniquePositions).sort());
+
+            showLoading(false);
+            applyFilters(); // Initial render
+        }
+
+        function populateDropdown(element, options) {
+            // Keep the first default option
+            const defaultOption = element.options[0].outerHTML;
+            element.innerHTML = defaultOption;
+            
+            options.forEach(opt => {
+                const optionElement = document.createElement('option');
+                optionElement.value = opt;
+                optionElement.textContent = opt;
+                element.appendChild(optionElement);
+            });
+        }
+
+        function applyFilters() {
+            const searchTerm = searchInput.value.toLowerCase().trim();
+            const selectedYear = yearFilter.value;
+            const selectedPosition = positionFilter.value;
+            const sortMode = sortSelect.value;
+
+            // Filter
+            filteredData = allData.filter(item => {
+                const matchesSearch = 
+                    item.id.toLowerCase().includes(searchTerm) ||
+                    item.name.toLowerCase().includes(searchTerm) ||
+                    item.nickname.toLowerCase().includes(searchTerm) ||
+                    item.year.toLowerCase().includes(searchTerm);
+                
+                const matchesYear = selectedYear === "" || item.year === selectedYear;
+                const matchesPosition = selectedPosition === "" || item.position === selectedPosition;
+
+                return matchesSearch && matchesYear && matchesPosition;
+            });
+
+            // Sort
+            filteredData.sort((a, b) => {
+                if (sortMode === 'id_asc') {
+                    // Try numeric sort for ID if possible
+                    let numA = parseInt(a.id);
+                    let numB = parseInt(b.id);
+                    if(!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.id.localeCompare(b.id, 'th');
+                }
+                else if (sortMode === 'id_desc') {
+                    let numA = parseInt(a.id);
+                    let numB = parseInt(b.id);
+                    if(!isNaN(numA) && !isNaN(numB)) return numB - numA;
+                    return b.id.localeCompare(a.id, 'th');
+                }
+                else if (sortMode === 'name_asc') return a.name.localeCompare(b.name, 'th');
+                else if (sortMode === 'name_desc') return b.name.localeCompare(a.name, 'th');
+                return 0;
+            });
+
+            renderData();
+        }
+
+        function renderData() {
+            resultsGrid.innerHTML = "";
+            resultCount.innerHTML = `พบข้อมูล <b>${filteredData.length}</b> รายการ จากทั้งหมด ${allData.length} รายการ`;
+
+            if (filteredData.length === 0) {
+                resultsGrid.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                resultsGrid.classList.remove('hidden');
+
+                filteredData.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = "bg-white rounded-2xl shadow-sm hover:shadow-md border border-gray-100 transition-all duration-300 transform hover:-translate-y-1 overflow-hidden flex flex-col h-full";
+                    
+                    // Card Header with Color Banner based on Year (Optional aesthetics)
+                    const getYearColor = (year) => {
+                        if(year.includes('1')) return 'bg-blue-500';
+                        if(year.includes('2')) return 'bg-emerald-500';
+                        if(year.includes('3')) return 'bg-amber-500';
+                        if(year.includes('4')) return 'bg-rose-500';
+                        return 'bg-indigo-500';
+                    };
+                    const bannerColor = getYearColor(item.year);
+
+                    card.innerHTML = `
+                        <div class="h-2 w-full ${bannerColor}"></div>
+                        <div class="p-5 flex-grow flex flex-col">
+                            <div class="flex justify-between items-start mb-3">
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-md bg-gray-100 text-gray-600 border border-gray-200">
+                                    <i class="fas fa-hashtag text-[10px] mr-1 opacity-70"></i>${item.id}
+                                </span>
+                                <span class="px-2.5 py-1 text-xs font-semibold rounded-md ${bannerColor} text-white shadow-sm">
+                                    ชั้นปี ${item.year || '-'}
+                                </span>
+                            </div>
+                            
+                            <h3 class="text-lg font-bold text-gray-900 mb-1 leading-tight">
+                                ${item.name}
+                            </h3>
+                            
+                            ${item.nickname ? `<div class="text-sm font-medium text-blue-600 mb-3"><i class="fas fa-smile opacity-70 mr-1.5"></i>น้อง${item.nickname}</div>` : ''}
+                            
+                            <div class="mt-auto pt-4 space-y-2 border-t border-gray-50">
+                                ${item.position ? `
+                                <div class="flex items-center text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">
+                                    <div class="w-6 flex justify-center text-gray-400 mr-2"><i class="fas fa-briefcase"></i></div>
+                                    <span class="truncate">${item.position}</span>
+                                </div>` : ''}
+                                
+                                ${item.email ? `
+                                <div class="flex items-center text-sm text-gray-600 bg-gray-50 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                                    <div class="w-6 flex justify-center text-gray-400 mr-2"><i class="fas fa-envelope"></i></div>
+                                    <a href="mailto:${item.email}" class="truncate text-blue-600 hover:underline">${item.email}</a>
+                                </div>` : ''}
+                            </div>
+                        </div>
+                    `;
+                    resultsGrid.appendChild(card);
+                });
+            }
+        }
+
+        function setupEventListeners() {
+            // Use 'input' for real-time search typing
+            searchInput.addEventListener('input', applyFilters);
+            
+            // Dropdowns
+            yearFilter.addEventListener('change', applyFilters);
+            positionFilter.addEventListener('change', applyFilters);
+            sortSelect.addEventListener('change', applyFilters);
+
+            // Reset Button
+            resetBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                yearFilter.value = '';
+                positionFilter.value = '';
+                sortSelect.value = 'id_asc';
+                applyFilters();
+            });
+        }
+
+        function showLoading(isLoading) {
+            if (isLoading) {
+                loadingState.classList.remove('hidden');
+                resultsGrid.classList.add('hidden');
+                errorState.classList.add('hidden');
+                emptyState.classList.add('hidden');
+            } else {
+                loadingState.classList.add('hidden');
+            }
+        }
+
+        function showError(message) {
+            showLoading(false);
+            errorState.classList.remove('hidden');
+            document.getElementById('errorMsg').textContent = message;
+            resultsGrid.classList.add('hidden');
+            emptyState.classList.add('hidden');
+        }
+
+        // Start Application
+        window.addEventListener('DOMContentLoaded', init);
+
+    </script>
+</body>
+</html>
