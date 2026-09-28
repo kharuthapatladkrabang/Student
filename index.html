@@ -208,7 +208,7 @@
             <div id="shareModal" class="hidden fixed inset-0 z-[60] bg-gray-900/50 backdrop-blur-sm p-4 overflow-y-auto">
                 <div class="max-w-3xl mx-auto mt-6 bg-white rounded-2xl shadow-2xl overflow-hidden">
                     <div class="px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center justify-between">
-                        <div><h2 class="text-xl font-bold"><i class="fas fa-share-nodes mr-2"></i>สร้างรายการแชร์</h2><p class="text-purple-100 text-sm mt-1">เลือกข้อมูลที่อนุญาตให้เว็บอื่นอ่านได้</p></div>
+                        <div><h2 id="shareModalTitle" class="text-xl font-bold"><i class="fas fa-share-nodes mr-2"></i>สร้างรายการแชร์</h2><p class="text-purple-100 text-sm mt-1">เลือกข้อมูลที่อนุญาตให้เว็บอื่นอ่านได้</p></div>
                         <button id="closeShareModalBtn" class="text-white/80 hover:text-white text-2xl" aria-label="ปิด"><i class="fas fa-times"></i></button>
                     </div>
                     <div class="p-6 space-y-6">
@@ -227,7 +227,7 @@
                         <div id="shareStatus" class="hidden rounded-xl p-3 text-sm"></div>
                         <div class="flex flex-col sm:flex-row gap-3 justify-end pt-2 border-t border-gray-100">
                             <button id="cancelShareBtn" class="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50">ยกเลิก</button>
-                            <button id="confirmShareBtn" class="px-5 py-2.5 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700"><i class="fas fa-link mr-2"></i>สร้างลิงก์</button>
+                            <button id="confirmShareBtn" class="px-5 py-2.5 rounded-xl bg-purple-600 text-white font-semibold hover:bg-purple-700"><i class="fas fa-link mr-2"></i><span id="confirmShareLabel">สร้างลิงก์</span></button>
                         </div>
                     </div>
                 </div>
@@ -246,7 +246,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAm2hoCr3FyhhSZg9q2bLU7vQPUFmydhI",
@@ -259,8 +259,10 @@
         };
         const firebaseApp = initializeApp(firebaseConfig);
         const db = getFirestore(firebaseApp);
-        const SHARE_COLLECTION = "sharedStudentLists";
-        const HISTORY_COLLECTION = "shareHistory";
+        // โครงสร้าง Firestore: student (collection) > shareData (document) > subcollections
+        // แยกพื้นที่ของโปรเจกต์นี้ออกจากโปรเจกต์อื่นอย่างชัดเจน
+        const SHARE_COLLECTION = "student/shareData/sharedStudentLists";
+        const HISTORY_COLLECTION = "student/shareData/shareHistory";
 
         // Google Sheets Published CSV URL
         const SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRshdqrNqiULIGkdVuN9tidZeUrHR8OgkWGNsKFBBWoc1T0rMCMdU1lJLpoe8qrGpuJVuY5wqXYzsmQ/pub?gid=1534305480&single=true&output=csv";
@@ -268,6 +270,8 @@
         let allData = [];
         let filteredData = [];
         let currentUser = null;
+        let editingShareId = null;
+        let editingHistoryDocId = null;
         const shareModal = document.getElementById('shareModal');
         const historyModal = document.getElementById('historyModal');
         const shareFields = document.getElementById('shareFields');
@@ -645,19 +649,42 @@
             return String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
         }
 
-        function openShareModal() {
+        function openShareModal(existing = null) {
+            editingShareId = existing?.shareId || null;
+            editingHistoryDocId = existing?.historyDocId || null;
+            document.getElementById('shareModalTitle').innerHTML = `<i class="fas fa-share-nodes mr-2"></i>${editingShareId ? 'แก้ไขรายการแชร์' : 'สร้างรายการแชร์'}`;
+            document.getElementById('confirmShareLabel').textContent = editingShareId ? 'บันทึกการแก้ไข' : 'สร้างลิงก์';
             shareFields.innerHTML = ''; shareYears.innerHTML = ''; sharePositions.innerHTML = '';
-            SHARE_FIELDS.forEach(field => checkboxHtml(shareFields, field.key, field.label, true, 'field'));
-            [...new Set(allData.map(x => x.year).filter(Boolean))].sort().forEach(year => checkboxHtml(shareYears, year, `ชั้นปี ${year}`, true, 'year'));
-            [...new Set(allData.map(x => x.position).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'th')).forEach(pos => checkboxHtml(sharePositions, pos, pos, true, 'position'));
+            const existingFields = existing?.fields || [];
+            const existingYears = existing?.years || [];
+            const existingPositions = existing?.positions || [];
+            SHARE_FIELDS.forEach(field => checkboxHtml(shareFields, field.key, field.label, !existing || existingFields.includes(field.key), 'field'));
+            [...new Set(allData.map(x => x.year).filter(Boolean))].sort().forEach(year => checkboxHtml(shareYears, year, `ชั้นปี ${year}`, !existing || existingYears.includes(year), 'year'));
+            [...new Set(allData.map(x => x.position).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'th')).forEach(pos => checkboxHtml(sharePositions, pos, pos, !existing || existingPositions.includes(pos), 'position'));
             shareStatus.className = 'hidden rounded-xl p-3 text-sm';
             shareModal.classList.remove('hidden');
         }
 
-        function closeShareModal() { shareModal.classList.add('hidden'); }
+        function closeShareModal() {
+            shareModal.classList.add('hidden');
+            editingShareId = null; editingHistoryDocId = null;
+            document.getElementById('shareModalTitle').innerHTML = '<i class="fas fa-share-nodes mr-2"></i>สร้างรายการแชร์';
+            document.getElementById('confirmShareLabel').textContent = 'สร้างลิงก์';
+        }
         function toggleChecks(container) { const boxes = [...container.querySelectorAll('input')]; const shouldCheck = boxes.some(box => !box.checked); boxes.forEach(box => box.checked = shouldCheck); }
         function selectedValues(container) { return [...container.querySelectorAll('input:checked')].map(input => input.value); }
-        function showShareStatus(message, type = 'success') { shareStatus.className = `rounded-xl p-3 text-sm ${type === 'error' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`; shareStatus.textContent = message; }
+        async function copyShareUrl(url, button) {
+            try { await navigator.clipboard.writeText(url); button.innerHTML = '<i class="fas fa-check mr-1"></i>คัดลอกแล้ว'; } catch { button.textContent = 'คัดลอกไม่สำเร็จ'; }
+        }
+
+        function showShareResult(pageUrl, apiUrl, count, updated = false) {
+            shareStatus.className = 'rounded-xl p-3 text-sm bg-green-50 text-green-700 border border-green-100 space-y-2';
+            shareStatus.innerHTML = `<div class="font-semibold"><i class="fas fa-check-circle mr-1"></i>${updated ? 'อัปเดตสำเร็จ' : 'สร้างลิงก์สำเร็จ'} มีข้อมูล ${count} รายการ</div>
+                <div class="text-xs font-semibold">ลิงก์หน้าเว็บสำหรับแชร์</div>
+                <div class="flex flex-col sm:flex-row gap-2"><input readonly value="${escapeHtml(pageUrl)}" class="min-w-0 flex-1 px-2 py-1 rounded border border-green-200 bg-white text-xs"><button class="copy-share-result shrink-0 px-3 py-1 rounded bg-green-600 text-white text-xs" data-url="${escapeHtml(pageUrl)}"><i class="fas fa-copy mr-1"></i>คัดลอกลิงก์เว็บ</button></div>
+                <details class="text-xs"><summary class="cursor-pointer">แสดง API URL สำหรับเว็บ/โปรแกรม</summary><div class="flex flex-col sm:flex-row gap-2 mt-1"><input readonly value="${escapeHtml(apiUrl)}" class="min-w-0 flex-1 px-2 py-1 rounded border border-green-200 bg-white text-xs"><button class="copy-share-result shrink-0 px-3 py-1 rounded bg-green-600 text-white text-xs" data-url="${escapeHtml(apiUrl)}"><i class="fas fa-copy mr-1"></i>คัดลอก API</button></div></details>`;
+            shareStatus.querySelectorAll('.copy-share-result').forEach(button => button.addEventListener('click', () => copyShareUrl(button.dataset.url, button)));
+        }
 
         async function createShareLink() {
             const fields = selectedValues(shareFields);
@@ -670,20 +697,23 @@
             const button = document.getElementById('confirmShareBtn');
             button.disabled = true; button.classList.add('opacity-60');
             try {
-                const shareDoc = await addDoc(collection(db, SHARE_COLLECTION), {
+                const sharePayload = {
                     type: 'public_student_list', fields, years, positions, records,
                     recordCount: records.length, createdBy: currentUser?.id || 'unknown',
                     createdByName: currentUser?.name || '', createdAt: serverTimestamp()
-                });
+                };
+                const shareDoc = editingShareId ? { id: editingShareId } : await addDoc(collection(db, SHARE_COLLECTION), sharePayload);
+                if (editingShareId) await updateDoc(doc(db, SHARE_COLLECTION, editingShareId), sharePayload);
                 const apiUrl = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/${SHARE_COLLECTION}/${shareDoc.id}`;
                 const pageUrl = `${location.origin}${location.pathname}?share=${shareDoc.id}`;
-                await addDoc(collection(db, HISTORY_COLLECTION), {
+                const historyPayload = {
                     shareId: shareDoc.id, apiUrl, pageUrl, fields, years, positions,
                     recordCount: records.length, createdBy: currentUser?.id || 'unknown',
                     createdByName: currentUser?.name || '', createdAt: serverTimestamp()
-                });
-                showShareStatus(`สร้างสำเร็จ มีข้อมูล ${records.length} รายการ\nAPI สำหรับเว็บอื่น: ${apiUrl}\nหน้าเว็บสำหรับเปิดดู: ${pageUrl}`);
-                await navigator.clipboard?.writeText(apiUrl);
+                };
+                if (editingHistoryDocId) await updateDoc(doc(db, HISTORY_COLLECTION, editingHistoryDocId), historyPayload);
+                else await addDoc(collection(db, HISTORY_COLLECTION), historyPayload);
+                showShareResult(pageUrl, apiUrl, records.length, Boolean(editingShareId));
             } catch (error) {
                 console.error('Firebase share error:', error);
                 showShareStatus('สร้างลิงก์ไม่สำเร็จ โปรดตรวจสอบ Firestore Security Rules และการเชื่อมต่อ Firebase', 'error');
@@ -696,8 +726,9 @@
                 const snapshot = await getDocs(collection(db, HISTORY_COLLECTION));
                 const rows = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
                 if (!rows.length) { historyList.innerHTML = '<div class="text-center text-gray-500 py-8">ยังไม่มีประวัติการแชร์</div>'; return; }
-                historyList.innerHTML = rows.map(row => `<div class="border border-gray-200 rounded-xl p-4"><div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2"><div><div class="font-semibold text-gray-800">${escapeHtml(row.createdByName || row.createdBy || 'ไม่ระบุผู้สร้าง')}</div><div class="text-xs text-gray-500">${escapeHtml(row.recordCount || 0)} รายการ · ฟิลด์: ${escapeHtml((row.fields || []).join(', '))}</div></div><div class="text-xs text-gray-500">${row.createdAt?.toDate ? row.createdAt.toDate().toLocaleString('th-TH') : 'ไม่ระบุเวลา'}</div></div><div class="mt-3 flex flex-col gap-1"><a class="text-xs text-purple-700 hover:underline break-all" href="${escapeHtml(row.apiUrl || '#')}" target="_blank" rel="noopener">API: ${escapeHtml(row.apiUrl || '-')}</a><button class="copy-history-url self-start text-xs text-gray-600 hover:text-purple-700" data-url="${escapeHtml(row.apiUrl || '')}"><i class="fas fa-copy mr-1"></i>คัดลอก API URL</button></div></div>`).join('');
-                historyList.querySelectorAll('.copy-history-url').forEach(btn => btn.addEventListener('click', async () => { await navigator.clipboard?.writeText(btn.dataset.url); btn.textContent = 'คัดลอกแล้ว'; }));
+                historyList.innerHTML = rows.map(row => `<div class="border border-gray-200 rounded-xl p-4"><div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2"><div><div class="font-semibold text-gray-800">${escapeHtml(row.createdByName || row.createdBy || 'ไม่ระบุผู้สร้าง')}</div><div class="text-xs text-gray-500">${escapeHtml(row.recordCount || 0)} รายการ · ฟิลด์: ${escapeHtml((row.fields || []).join(', '))}</div></div><div class="text-xs text-gray-500">${row.createdAt?.toDate ? row.createdAt.toDate().toLocaleString('th-TH') : 'ไม่ระบุเวลา'}</div></div><div class="mt-3 space-y-2"><div class="flex flex-col sm:flex-row gap-2"><a class="min-w-0 flex-1 text-xs text-purple-700 hover:underline break-all" href="${escapeHtml(row.pageUrl || '#')}" target="_blank" rel="noopener">เว็บ: ${escapeHtml(row.pageUrl || '-')}</a><button class="copy-history-url shrink-0 text-xs text-white bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded" data-url="${escapeHtml(row.pageUrl || '')}"><i class="fas fa-copy mr-1"></i>คัดลอกลิงก์เว็บ</button></div><div class="flex flex-wrap gap-2"><button class="edit-history-url text-xs text-white bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded" data-share='${escapeHtml(JSON.stringify({ ...row, historyDocId: row.id }))}'><i class="fas fa-pen mr-1"></i>แก้ไขรายการนี้</button><button class="copy-history-url text-xs text-gray-700 bg-gray-100 hover:bg-gray-200 px-3 py-1 rounded" data-url="${escapeHtml(row.apiUrl || '')}"><i class="fas fa-copy mr-1"></i>คัดลอก API URL</button></div></div></div>`).join('');
+                historyList.querySelectorAll('.copy-history-url').forEach(btn => btn.addEventListener('click', () => copyShareUrl(btn.dataset.url, btn)));
+                historyList.querySelectorAll('.edit-history-url').forEach(btn => btn.addEventListener('click', () => { historyModal.classList.add('hidden'); openShareModal(JSON.parse(btn.dataset.share)); }));
             } catch (error) { console.error('Firebase history error:', error); historyList.innerHTML = '<div class="text-center text-red-600 py-8">โหลดประวัติไม่สำเร็จ โปรดตรวจสอบ Firestore Security Rules</div>'; }
         }
 
